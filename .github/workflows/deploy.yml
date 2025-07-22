@@ -24,33 +24,49 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Set Cloudflare Secrets
+      - name: Build Frontend
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          echo "Setting Cloudflare secrets..."
-          npx wrangler secret put SUPABASE_URL <<< "${{ secrets.SUPABASE_URL }}"
-          npx wrangler secret put SUPABASE_ANON_KEY <<< "${{ secrets.SUPABASE_ANON_KEY }}"
-          npx wrangler secret put OPENROUTER_API_KEY <<< "${{ secrets.OPENROUTER_API_KEY }}"
-          npx wrangler secret put WORKER_URL <<< "${{ secrets.WORKER_URL }}"
-
-      - name: Build
-        env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
         run: npm run build
 
-      - name: Deploy
+      - name: Deploy Worker and Get URL
+        id: deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npm run deploy
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          # Desplegar el worker
+          DEPLOY_OUTPUT=$(npm run deploy)
+          echo "Deploy output: $DEPLOY_OUTPUT"
+          
+          # Extraer la URL del worker del output
+          WORKER_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://.*workers.dev' | head -n 1)
+          echo "Worker URL: $WORKER_URL"
+          
+          # Guardar la URL como output del paso
+          echo "worker_url=$WORKER_URL" >> $GITHUB_OUTPUT
+          
+          # Configurar el secreto WORKER_URL
+          npx wrangler secret put WORKER_URL <<< "$WORKER_URL"
 
-      - name: Deployment Status
+      - name: Update CORS Origins
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+        run: |
+          echo "Updating CORS with Worker URL: $WORKER_URL"
+          npx wrangler secret put WORKER_URL <<< "$WORKER_URL"
+
+      - name: Verify Deployment
         if: always()
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
+          if [ "${{ steps.deploy.outputs.worker_url }}" != "" ]; then
             echo "✅ Deployment successful!"
-            echo "Worker URL: ${{ secrets.WORKER_URL }}"
+            echo "Worker URL: ${{ steps.deploy.outputs.worker_url }}"
+            echo "CORS origins updated with the Worker URL"
           else
-            echo "❌ Deployment failed"
+            echo "❌ Deployment failed or Worker URL not found"
             exit 1
           fi
