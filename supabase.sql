@@ -1,3 +1,109 @@
+-- SQL para crear la base de datos de usuarios
+
+
+-- Crear la tabla users si no existe
+CREATE TABLE IF NOT EXISTS users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clerk_id TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE,
+  first_name TEXT,
+  last_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Habilitar RLS
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- Eliminar políticas existentes si las hay
+DROP POLICY IF EXISTS "Allow public insert" ON users;
+DROP POLICY IF EXISTS "Allow individual read" ON users;
+DROP POLICY IF EXISTS "Allow individual update" ON users;
+
+-- Permitir inserción pública (necesario para el registro inicial)
+CREATE POLICY "Allow public insert"
+ON users
+FOR INSERT
+WITH CHECK (true);
+
+-- Permitir lectura individual
+CREATE POLICY "Allow individual read"
+ON users
+FOR SELECT
+USING (true);
+
+-- Permitir actualización individual
+CREATE POLICY "Allow individual update"
+ON users
+FOR UPDATE
+USING (true);
+
+-- Crear índices si no existen
+CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+
+
+-- SQL para crear la base de datos de las preguntas
+
+
+-- Crear la tabla de preguntas si no existe
+CREATE TABLE IF NOT EXISTS questions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  options JSONB NOT NULL,
+  correct_answer TEXT NOT NULL,
+  explanation TEXT,
+  content_source TEXT,
+  metadata JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Habilitar RLS
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+
+-- Eliminar políticas existentes si las hay
+DROP POLICY IF EXISTS "Allow all operations from worker" ON questions;
+DROP POLICY IF EXISTS "Enable read for users" ON questions;
+DROP POLICY IF EXISTS "Enable insert for users" ON questions;
+
+-- Política para lectura: cualquier usuario puede leer sus propias preguntas
+CREATE POLICY "Enable read for users"
+ON questions FOR SELECT
+USING (true);
+
+-- Política para inserción: permitir inserción con user_id válido
+CREATE POLICY "Enable insert for users"
+ON questions FOR INSERT
+WITH CHECK (true);
+
+-- Índices
+CREATE INDEX IF NOT EXISTS idx_questions_user_id ON questions(user_id);
+CREATE INDEX IF NOT EXISTS idx_questions_created_at ON questions(created_at);
+
+-- Trigger para actualizar updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_questions_updated_at
+    BEFORE UPDATE ON questions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column(); 
+
+
+
+-- SQL para crear la base de datos de los quizzes
+
+
+
 -- Crear la tabla de quizzes
 CREATE TABLE IF NOT EXISTS quizzes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
