@@ -2,6 +2,9 @@
 
 EasyStudy AI es una aplicación web que convierte documentos PDF en cuestionarios interactivos utilizando inteligencia artificial. La aplicación permite a los usuarios subir documentos PDF y genera automáticamente preguntas de opción múltiple basadas en el contenido.
 
+## DEMO:
+https://study-ai-plan.ksquareluisrh.workers.dev/
+
 ## Arquitectura
 
 ### Frontend
